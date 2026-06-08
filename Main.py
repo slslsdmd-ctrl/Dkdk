@@ -1,3 +1,4 @@
+ 
 import random
 import json
 import os
@@ -8,7 +9,7 @@ from datetime import datetime
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, ContextTypes, MessageHandler, filters
 
-# ========== ТОКЕН БЕРЁТСЯ ИЗ ПЕРЕМЕННЫХ ОКРУЖЕНИЯ ==========
+# ========== ТОКЕН ==========
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 
 if not BOT_TOKEN:
@@ -18,12 +19,25 @@ if not BOT_TOKEN:
 ADMIN_ID = int(os.getenv("ADMIN_ID", 8039111975))
 SUPPORT = "@aztec_bet_support"
 CASINO_NAME = "AZTEC BET"
+CHANNEL = "Aztec_wins"
+CHANNEL_LINK = "https://t.me/Aztec_wins"
 TON_WALLET = os.getenv("TON_WALLET", "UQCvOIAt2X1PHfquND-LxzVYg0Gl3a_IExORwwPjowI3Nkb8")
 MIN_BET = 0.1
 MIN_DEPOSIT = 1
 MIN_WITHDRAW = 1
 REFERRAL_REGISTER_BONUS = 0.1
 REFERRAL_DEPOSIT_PERCENT = 0.05
+
+# ========== АЧИВКИ (ТОЛЬКО ДЛЯ КРАСОТЫ, БЕЗ ДЕНЕГ) ==========
+ACHIEVEMENTS = {
+    "first_win": {"name": "🏆 ПЕРВАЯ ПОБЕДА", "desc": "Выиграть свою первую ставку"},
+    "lucky_10": {"name": "🍀 ВЕЗУНЧИК", "desc": "Выиграть 10 раз подряд"},
+    "slot_master": {"name": "🎰 МАСТЕР СЛОТОВ", "desc": "Сделать 1000 вращений в слотах"},
+    "king_ref": {"name": "👑 КОРОЛЬ РЕФЕРАЛОВ", "desc": "Привести 50 друзей"},
+    "millionaire": {"name": "💰 МИЛЛИОНЕР", "desc": "Накопить 100 TON на балансе"},
+    "high_roller": {"name": "💎 ХАЙРОЛЛЕР", "desc": "Сделать ставку 100 TON за раз"},
+    "all_games": {"name": "🎮 ПРОФЕССИОНАЛ", "desc": "Сыграть во все игры"},
+}
 
 # ========== ЛОГИ ==========
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
@@ -49,6 +63,19 @@ def load_data():
                     users[uid]['total_bet'] = float(users[uid].get('total_bet', 0))
                     users[uid]['total_win'] = float(users[uid].get('total_win', 0))
                     users[uid]['lang'] = users[uid].get('lang', 'ru')
+                    users[uid]['stats'] = users[uid].get('stats', {
+                        'coin': {'wins': 0, 'losses': 0, 'total_bet': 0, 'total_win': 0},
+                        'number': {'wins': 0, 'losses': 0, 'total_bet': 0, 'total_win': 0},
+                        'dice_sum': {'wins': 0, 'losses': 0, 'total_bet': 0, 'total_win': 0},
+                        'dice_over': {'wins': 0, 'losses': 0, 'total_bet': 0, 'total_win': 0},
+                        'dice_even': {'wins': 0, 'losses': 0, 'total_bet': 0, 'total_win': 0},
+                        'slot': {'wins': 0, 'losses': 0, 'total_bet': 0, 'total_win': 0, 'spins': 0},
+                        'roulette': {'wins': 0, 'losses': 0, 'total_bet': 0, 'total_win': 0},
+                        'rps': {'wins': 0, 'losses': 0, 'total_bet': 0, 'total_win': 0, 'draws': 0},
+                    })
+                    users[uid]['achievements'] = users[uid].get('achievements', [])
+                    users[uid]['win_streak'] = users[uid].get('win_streak', 0)
+                    users[uid]['best_streak'] = users[uid].get('best_streak', 0)
         if os.path.exists(REQUESTS_FILE):
             with open(REQUESTS_FILE, "r") as f:
                 withdraw_requests = json.load(f)
@@ -66,12 +93,67 @@ def save_data():
 
 load_data()
 
+# ========== ПРОВЕРКА АЧИВОК (БЕЗ ВЫДАЧИ ДЕНЕГ) ==========
+async def check_achievements(uid):
+    user = users[uid]
+    new_achievements = []
+    
+    if user['total_win'] > 0 and "first_win" not in user['achievements']:
+        user['achievements'].append("first_win")
+        new_achievements.append("first_win")
+    
+    if user.get('win_streak', 0) >= 10 and "lucky_10" not in user['achievements']:
+        user['achievements'].append("lucky_10")
+        new_achievements.append("lucky_10")
+    
+    if user['stats']['slot']['spins'] >= 1000 and "slot_master" not in user['achievements']:
+        user['achievements'].append("slot_master")
+        new_achievements.append("slot_master")
+    
+    if len(user.get('referrals', [])) >= 50 and "king_ref" not in user['achievements']:
+        user['achievements'].append("king_ref")
+        new_achievements.append("king_ref")
+    
+    if user['balance'] >= 100 and "millionaire" not in user['achievements']:
+        user['achievements'].append("millionaire")
+        new_achievements.append("millionaire")
+    
+    games_played = sum(1 for g in user['stats'] if user['stats'][g]['total_bet'] > 0)
+    if games_played >= 8 and "all_games" not in user['achievements']:
+        user['achievements'].append("all_games")
+        new_achievements.append("all_games")
+    
+    if new_achievements:
+        save_data()
+    
+    return new_achievements
+
+# ========== ОБНОВЛЕНИЕ СТАТИСТИКИ ИГРЫ ==========
+def update_game_stats(uid, game, won, bet, win_amount=0):
+    user = users[uid]
+    stats = user['stats'][game]
+    stats['total_bet'] += bet
+    if won:
+        stats['wins'] += 1
+        stats['total_win'] += win_amount
+        user['win_streak'] += 1
+        if user['win_streak'] > user['best_streak']:
+            user['best_streak'] = user['win_streak']
+    else:
+        stats['losses'] += 1
+        user['win_streak'] = 0
+    if game == 'slot':
+        stats['spins'] += 1
+    if game == 'rps' and win_amount == 0:
+        stats['draws'] = stats.get('draws', 0) + 1
+    save_data()
+
 # ========== ПЕРЕВОДЫ ==========
 TEXTS = {
     'ru': {
-        'welcome': "🎰 ДОБРО ПОЖАЛОВАТЬ В {}\n\nПРИВЕТ, {}!\n💰 БАЛАНС: {} TON",
+        'welcome': "🎰 ДОБРО ПОЖАЛОВАТЬ В {}\n\nПРИВЕТ, {}!\n💰 БАЛАНС: {} TON\n📢 КАНАЛ: {}",
         'balance': "💰 БАЛАНС: {} TON",
-        'stats': "📊 СТАТИСТИКА\n\nСТАВОК: {}\nПОСТАВЛЕНО: {} TON\nВЫИГРАНО: {} TON",
+        'stats': "📊 СТАТИСТИКА\n\nСТАВОК: {}\nПОСТАВЛЕНО: {} TON\nВЫИГРАНО: {} TON\n🔥 ЛУЧШАЯ СЕРИЯ: {}",
         'deposit': "💎 ПОПОЛНЕНИЕ\n\nКОШЕЛЁК: {}\nМИНИМУМ: {} TON\nВ КОММЕНТАРИИ ВАШ ID: {}",
         'withdraw': "💸 ВЫВОД\n\n/withdraw [СУММА] [АДРЕС]",
         'support': "📞 ПОДДЕРЖКА: {}",
@@ -109,11 +191,16 @@ TEXTS = {
         'dice_result': "🎲 КОСТИ\n\n{} + {} = {}\n{}",
         'rps_result': "✂️ КНБ\n\nВЫ: {}  БОТ: {}\n{}",
         'roulette_result': "🎡 РУЛЕТКА\n\nВЫПАЛО: {}\n{}",
+        'top': "🏆 ТОП-{} ЛИДЕРОВ ПО ВЫИГРЫШУ 🏆\n\n{}",
+        'my_stats': "📊 МОЯ СТАТИСТИКА ПО ИГРАМ 📊\n\n{}",
+        'achievements': "🏅 АЧИВКИ 🏅\n\n{}",
+        'channel': "📢 НАШ КАНАЛ\n\nПодписывайся: {}",
+        'new_achievement': "🏆 НОВАЯ АЧИВКА! 🏆\n\n{} → {}",
     },
     'en': {
-        'welcome': "🎰 WELCOME TO {}\n\nHELLO, {}!\n💰 BALANCE: {} TON",
+        'welcome': "🎰 WELCOME TO {}\n\nHELLO, {}!\n💰 BALANCE: {} TON\n📢 CHANNEL: {}",
         'balance': "💰 BALANCE: {} TON",
-        'stats': "📊 STATISTICS\n\nBETS: {}\nBETTED: {} TON\nWON: {} TON",
+        'stats': "📊 STATISTICS\n\nBETS: {}\nBETTED: {} TON\nWON: {} TON\n🔥 BEST STREAK: {}",
         'deposit': "💎 DEPOSIT\n\nWALLET: {}\nMINIMUM: {} TON\nYOUR ID: {}",
         'withdraw': "💸 WITHDRAW\n\n/withdraw [AMOUNT] [ADDRESS]",
         'support': "📞 SUPPORT: {}",
@@ -151,6 +238,11 @@ TEXTS = {
         'dice_result': "🎲 DICE\n\n{} + {} = {}\n{}",
         'rps_result': "✂️ RPS\n\nYOU: {}  BOT: {}\n{}",
         'roulette_result': "🎡 ROULETTE\n\nRESULT: {}\n{}",
+        'top': "🏆 TOP-{} LEADERS BY WINNINGS 🏆\n\n{}",
+        'my_stats': "📊 MY GAME STATISTICS 📊\n\n{}",
+        'achievements': "🏅 ACHIEVEMENTS 🏅\n\n{}",
+        'channel': "📢 OUR CHANNEL\n\nSubscribe: {}",
+        'new_achievement': "🏆 NEW ACHIEVEMENT! 🏆\n\n{} → {}",
     }
 }
 
@@ -176,11 +268,15 @@ def main_menu(uid):
     keyboard = [
         [InlineKeyboardButton("💰 Баланс", callback_data="balance")],
         [InlineKeyboardButton("📊 Статистика", callback_data="stats")],
+        [InlineKeyboardButton("🏆 Топ лидеров", callback_data="top")],
+        [InlineKeyboardButton("🏅 Ачивки", callback_data="achievements")],
+        [InlineKeyboardButton("📈 Моя статистика", callback_data="my_stats")],
         [InlineKeyboardButton("💎 Пополнить", callback_data="deposit")],
         [InlineKeyboardButton("🎰 Игры", callback_data="games_menu")],
         [InlineKeyboardButton("💸 Вывести", callback_data="withdraw_menu")],
         [InlineKeyboardButton("🎁 Демо", callback_data="demo_mode")],
         [InlineKeyboardButton("🤝 Рефералы", callback_data="referral")],
+        [InlineKeyboardButton("📢 Канал", callback_data="channel")],
         [InlineKeyboardButton("📞 Поддержка", callback_data="support")],
         [InlineKeyboardButton("🌐 English / Русский", callback_data="change_lang")]
     ]
@@ -223,7 +319,16 @@ def roulette_menu(uid):
 # ========== ОСНОВНЫЕ ФУНКЦИИ ==========
 async def ensure_user_exists(uid):
     if uid not in users:
-        users[uid] = {"balance": 0, "total_bet": 0, "total_win": 0, "spins": 0, "referrer": None, "referrals": [], "total_ref_earnings": 0, "total_deposit": 0, "lang": "ru"}
+        users[uid] = {"balance": 0, "total_bet": 0, "total_win": 0, "spins": 0, "referrer": None, "referrals": [], "total_ref_earnings": 0, "total_deposit": 0, "lang": "ru", "win_streak": 0, "best_streak": 0, "achievements": [], "stats": {
+            'coin': {'wins': 0, 'losses': 0, 'total_bet': 0, 'total_win': 0},
+            'number': {'wins': 0, 'losses': 0, 'total_bet': 0, 'total_win': 0},
+            'dice_sum': {'wins': 0, 'losses': 0, 'total_bet': 0, 'total_win': 0},
+            'dice_over': {'wins': 0, 'losses': 0, 'total_bet': 0, 'total_win': 0},
+            'dice_even': {'wins': 0, 'losses': 0, 'total_bet': 0, 'total_win': 0},
+            'slot': {'wins': 0, 'losses': 0, 'total_bet': 0, 'total_win': 0, 'spins': 0},
+            'roulette': {'wins': 0, 'losses': 0, 'total_bet': 0, 'total_win': 0},
+            'rps': {'wins': 0, 'losses': 0, 'total_bet': 0, 'total_win': 0, 'draws': 0},
+        }}
         save_data()
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -246,7 +351,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         except:
             pass
     
-    await update.message.reply_text(get_text(uid, 'welcome', CASINO_NAME, name, round_ton(users[uid]['balance'])), reply_markup=main_menu(uid))
+    await update.message.reply_text(get_text(uid, 'welcome', CASINO_NAME, name, round_ton(users[uid]['balance']), CHANNEL_LINK), reply_markup=main_menu(uid))
 
 async def lang_choice(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -271,7 +376,88 @@ async def set_language(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await ensure_user_exists(uid)
     users[uid]['lang'] = lang
     save_data()
-    await query.message.edit_text(get_text(uid, 'welcome', CASINO_NAME, query.from_user.first_name, round_ton(users[uid]['balance'])), reply_markup=main_menu(uid))
+    await query.message.edit_text(get_text(uid, 'welcome', CASINO_NAME, query.from_user.first_name, round_ton(users[uid]['balance']), CHANNEL_LINK), reply_markup=main_menu(uid))
+
+# ========== ТОП ЛИДЕРОВ ==========
+async def top_leaderboard(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    uid = str(update.effective_user.id)
+    await ensure_user_exists(uid)
+    
+    sorted_users = sorted(users.items(), key=lambda x: x[1].get('total_win', 0), reverse=True)[:100]
+    
+    message_text = ""
+    for i, (user_id, data) in enumerate(sorted_users[:100], 1):
+        try:
+            user = await context.bot.get_chat(int(user_id))
+            name = user.first_name or "Player"
+        except:
+            name = user_id[:8]
+        
+        medal = ""
+        if i == 1:
+            medal = "👑 "
+        elif i == 2:
+            medal = "🥈 "
+        elif i == 3:
+            medal = "🥉 "
+        else:
+            medal = ""
+        
+        message_text += f"{medal}{i}. {name[:15]} — {round_ton(data.get('total_win', 0))} TON\n"
+    
+    await update.message.reply_text(get_text(uid, 'top', 100, message_text), reply_markup=main_menu(uid))
+
+# ========== ЛИЧНАЯ СТАТИСТИКА ПО ИГРАМ ==========
+async def my_game_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    uid = str(update.effective_user.id)
+    await ensure_user_exists(uid)
+    
+    stats = users[uid]['stats']
+    
+    stats_text = ""
+    
+    games_names = {
+        'coin': '🪙 Монетка',
+        'number': '🔢 Угадай число',
+        'dice_sum': '🎲 Сумма костей',
+        'dice_over': '🎲 Больше/Меньше 7',
+        'dice_even': '🎲 Чёт/Нечет',
+        'slot': '🎰 Слоты',
+        'roulette': '🎡 Рулетка',
+        'rps': '✂️ КНБ',
+    }
+    
+    for game, name in games_names.items():
+        data = stats[game]
+        total = data['wins'] + data['losses'] + data.get('draws', 0)
+        if total > 0:
+            win_rate = (data['wins'] / total * 100) if total > 0 else 0
+            stats_text += f"\n{name}:\n   🎯 Игр: {total}\n   🏆 Побед: {data['wins']}\n   📉 Поражений: {data['losses']}\n   📈 WinRate: {win_rate:.1f}%\n"
+    
+    if not stats_text:
+        stats_text = "📭 НЕТ ДАННЫХ. СЫГРАЙТЕ ХОТЯ БЫ ОДНУ ИГРУ!"
+    
+    await update.message.reply_text(get_text(uid, 'my_stats', stats_text), reply_markup=main_menu(uid))
+
+# ========== АЧИВКИ ==========
+async def achievements_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    uid = str(update.effective_user.id)
+    await ensure_user_exists(uid)
+    
+    user_achievements = users[uid].get('achievements', [])
+    
+    text = ""
+    for ach_id, ach in ACHIEVEMENTS.items():
+        status = "✅" if ach_id in user_achievements else "❌"
+        text += f"{status} {ach['name']}\n   → {ach['desc']}\n\n"
+    
+    await update.message.reply_text(get_text(uid, 'achievements', text), reply_markup=main_menu(uid))
+
+# ========== КАНАЛ ==========
+async def channel(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    uid = str(update.effective_user.id)
+    await ensure_user_exists(uid)
+    await update.message.reply_text(get_text(uid, 'channel', CHANNEL_LINK), reply_markup=main_menu(uid))
 
 # ========== ОСНОВНЫЕ КОМАНДЫ ==========
 async def balance(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -282,7 +468,7 @@ async def balance(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = str(update.effective_user.id)
     await ensure_user_exists(uid)
-    await update.message.reply_text(get_text(uid, 'stats', users[uid]['spins'], round_ton(users[uid]['total_bet']), round_ton(users[uid]['total_win'])), reply_markup=main_menu(uid))
+    await update.message.reply_text(get_text(uid, 'stats', users[uid]['spins'], round_ton(users[uid]['total_bet']), round_ton(users[uid]['total_win']), users[uid].get('best_streak', 0)), reply_markup=main_menu(uid))
 
 async def deposit(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = str(update.effective_user.id)
@@ -561,7 +747,8 @@ async def play_coin(update: Update, context: ContextTypes.DEFAULT_TYPE, choice):
     uid = str(query.from_user.id)
     bet = context.user_data.get('bet_amount', 0)
     result = random.choice(["орел", "решка"])
-    if choice == result:
+    won = choice == result
+    if won:
         win = bet * 2
         msg = get_text(uid, 'win', round_ton(win))
     else:
@@ -572,15 +759,23 @@ async def play_coin(update: Update, context: ContextTypes.DEFAULT_TYPE, choice):
     if win > 0:
         users[uid]["total_win"] += win
     users[uid]["spins"] += 1
+    update_game_stats(uid, 'coin', won, bet, win if win > 0 else 0)
     save_data()
-    await query.message.edit_text(f"{get_text(uid, 'coin')}\n\nВАШ ВЫБОР: {choice}\nВЫПАЛО: {result}\n{msg}\n\n💰 {get_text(uid, 'balance', round_ton(users[uid]['balance']))}", reply_markup=main_menu(uid))
+    
+    new_achievements = await check_achievements(uid)
+    ach_msg = ""
+    for ach in new_achievements:
+        ach_msg += f"\n\n{ACHIEVEMENTS[ach]['name']}"
+    
+    await query.message.edit_text(f"{get_text(uid, 'coin')}\n\nВАШ ВЫБОР: {choice}\nВЫПАЛО: {result}\n{msg}{ach_msg}\n\n💰 {get_text(uid, 'balance', round_ton(users[uid]['balance']))}", reply_markup=main_menu(uid))
 
 async def play_number(update: Update, context: ContextTypes.DEFAULT_TYPE, guess):
     query = update.callback_query
     uid = str(query.from_user.id)
     bet = context.user_data.get('bet_amount', 0)
     number = random.randint(1, 10)
-    if guess == number:
+    won = guess == number
+    if won:
         win = bet * 3
         msg = get_text(uid, 'win', round_ton(win))
     else:
@@ -591,8 +786,15 @@ async def play_number(update: Update, context: ContextTypes.DEFAULT_TYPE, guess)
     if win > 0:
         users[uid]["total_win"] += win
     users[uid]["spins"] += 1
+    update_game_stats(uid, 'number', won, bet, win if win > 0 else 0)
     save_data()
-    await query.message.edit_text(f"{get_text(uid, 'number')}\n\nВАШЕ ЧИСЛО: {guess}\nВЫПАЛО: {number}\n{msg}\n\n💰 {get_text(uid, 'balance', round_ton(users[uid]['balance']))}", reply_markup=main_menu(uid))
+    
+    new_achievements = await check_achievements(uid)
+    ach_msg = ""
+    for ach in new_achievements:
+        ach_msg += f"\n\n{ACHIEVEMENTS[ach]['name']}"
+    
+    await query.message.edit_text(f"{get_text(uid, 'number')}\n\nВАШЕ ЧИСЛО: {guess}\nВЫПАЛО: {number}\n{msg}{ach_msg}\n\n💰 {get_text(uid, 'balance', round_ton(users[uid]['balance']))}", reply_markup=main_menu(uid))
 
 async def play_dice_sum(update: Update, context: ContextTypes.DEFAULT_TYPE, guess):
     query = update.callback_query
@@ -600,7 +802,8 @@ async def play_dice_sum(update: Update, context: ContextTypes.DEFAULT_TYPE, gues
     bet = context.user_data.get('bet_amount', 0)
     d1, d2 = random.randint(1,6), random.randint(1,6)
     total = d1 + d2
-    if guess == total:
+    won = guess == total
+    if won:
         win = bet * 3
         msg = get_text(uid, 'win', round_ton(win))
     else:
@@ -611,8 +814,15 @@ async def play_dice_sum(update: Update, context: ContextTypes.DEFAULT_TYPE, gues
     if win > 0:
         users[uid]["total_win"] += win
     users[uid]["spins"] += 1
+    update_game_stats(uid, 'dice_sum', won, bet, win if win > 0 else 0)
     save_data()
-    await query.message.edit_text(get_text(uid, 'dice_result', d1, d2, total, msg) + f"\n\n💰 {get_text(uid, 'balance', round_ton(users[uid]['balance']))}", reply_markup=main_menu(uid))
+    
+    new_achievements = await check_achievements(uid)
+    ach_msg = ""
+    for ach in new_achievements:
+        ach_msg += f"\n\n{ACHIEVEMENTS[ach]['name']}"
+    
+    await query.message.edit_text(get_text(uid, 'dice_result', d1, d2, total, msg) + f"{ach_msg}\n\n💰 {get_text(uid, 'balance', round_ton(users[uid]['balance']))}", reply_markup=main_menu(uid))
 
 async def play_dice_over(update: Update, context: ContextTypes.DEFAULT_TYPE, choice):
     query = update.callback_query
@@ -621,12 +831,15 @@ async def play_dice_over(update: Update, context: ContextTypes.DEFAULT_TYPE, cho
     d1, d2 = random.randint(1,6), random.randint(1,6)
     total = d1 + d2
     if (choice == "more" and total > 7) or (choice == "less" and total < 7):
+        won = True
         win = bet * 2
         msg = get_text(uid, 'win', round_ton(win))
     elif total == 7:
+        won = False
         win = 0
         msg = get_text(uid, 'draw')
     else:
+        won = False
         win = -bet
         msg = get_text(uid, 'lose', round_ton(bet))
     users[uid]["balance"] += win
@@ -634,8 +847,15 @@ async def play_dice_over(update: Update, context: ContextTypes.DEFAULT_TYPE, cho
     if win > 0:
         users[uid]["total_win"] += win
     users[uid]["spins"] += 1
+    update_game_stats(uid, 'dice_over', won, bet, win if win > 0 else 0)
     save_data()
-    await query.message.edit_text(get_text(uid, 'dice_result', d1, d2, total, msg) + f"\n\n💰 {get_text(uid, 'balance', round_ton(users[uid]['balance']))}", reply_markup=main_menu(uid))
+    
+    new_achievements = await check_achievements(uid)
+    ach_msg = ""
+    for ach in new_achievements:
+        ach_msg += f"\n\n{ACHIEVEMENTS[ach]['name']}"
+    
+    await query.message.edit_text(get_text(uid, 'dice_result', d1, d2, total, msg) + f"{ach_msg}\n\n💰 {get_text(uid, 'balance', round_ton(users[uid]['balance']))}", reply_markup=main_menu(uid))
 
 async def play_dice_even(update: Update, context: ContextTypes.DEFAULT_TYPE, choice):
     query = update.callback_query
@@ -644,7 +864,8 @@ async def play_dice_even(update: Update, context: ContextTypes.DEFAULT_TYPE, cho
     d1, d2 = random.randint(1,6), random.randint(1,6)
     total = d1 + d2
     is_even = total % 2 == 0
-    if (choice == "even" and is_even) or (choice == "odd" and not is_even):
+    won = (choice == "even" and is_even) or (choice == "odd" and not is_even)
+    if won:
         win = bet * 2
         msg = get_text(uid, 'win', round_ton(win))
     else:
@@ -655,8 +876,15 @@ async def play_dice_even(update: Update, context: ContextTypes.DEFAULT_TYPE, cho
     if win > 0:
         users[uid]["total_win"] += win
     users[uid]["spins"] += 1
+    update_game_stats(uid, 'dice_even', won, bet, win if win > 0 else 0)
     save_data()
-    await query.message.edit_text(get_text(uid, 'dice_result', d1, d2, total, msg) + f"\n\n💰 {get_text(uid, 'balance', round_ton(users[uid]['balance']))}", reply_markup=main_menu(uid))
+    
+    new_achievements = await check_achievements(uid)
+    ach_msg = ""
+    for ach in new_achievements:
+        ach_msg += f"\n\n{ACHIEVEMENTS[ach]['name']}"
+    
+    await query.message.edit_text(get_text(uid, 'dice_result', d1, d2, total, msg) + f"{ach_msg}\n\n💰 {get_text(uid, 'balance', round_ton(users[uid]['balance']))}", reply_markup=main_menu(uid))
 
 async def play_slot(update, context, bet):
     query = update.callback_query if hasattr(update, 'callback_query') else None
@@ -682,16 +910,25 @@ async def play_slot(update, context, bet):
     if mult > 0:
         win = bet * mult
         msg = f"🎉 ВЫИГРЫШ +{round_ton(win)} TON (x{mult})"
+        won = True
     else:
         win = -bet
         msg = f"😢 ПРОИГРЫШ -{round_ton(bet)} TON"
+        won = False
     users[uid]["balance"] += win
     users[uid]["total_bet"] += bet
     if win > 0:
         users[uid]["total_win"] += win
     users[uid]["spins"] += 1
+    update_game_stats(uid, 'slot', won, bet, win if win > 0 else 0)
     save_data()
-    await msg_func(get_text(uid, 'slot_result', s1, s2, s3, msg) + f"\n\n💰 {get_text(uid, 'balance', round_ton(users[uid]['balance']))}", reply_markup=main_menu(uid))
+    
+    new_achievements = await check_achievements(uid)
+    ach_msg = ""
+    for ach in new_achievements:
+        ach_msg += f"\n\n{ACHIEVEMENTS[ach]['name']}"
+    
+    await msg_func(get_text(uid, 'slot_result', s1, s2, s3, msg) + f"{ach_msg}\n\n💰 {get_text(uid, 'balance', round_ton(users[uid]['balance']))}", reply_markup=main_menu(uid))
 
 async def play_rps(update: Update, context: ContextTypes.DEFAULT_TYPE, player):
     query = update.callback_query
@@ -701,12 +938,15 @@ async def play_rps(update: Update, context: ContextTypes.DEFAULT_TYPE, player):
     names = {"rock": "КАМЕНЬ", "scissors": "НОЖНИЦЫ", "paper": "БУМАГА"}
     bot = random.choice(["rock", "scissors", "paper"])
     if player == bot:
+        won = False
         win = 0
         msg = get_text(uid, 'draw')
     elif (player == "rock" and bot == "scissors") or (player == "scissors" and bot == "paper") or (player == "paper" and bot == "rock"):
+        won = True
         win = bet * 2
         msg = get_text(uid, 'win', round_ton(win))
     else:
+        won = False
         win = -bet
         msg = get_text(uid, 'lose', round_ton(bet))
     users[uid]["balance"] += win
@@ -714,8 +954,15 @@ async def play_rps(update: Update, context: ContextTypes.DEFAULT_TYPE, player):
     if win > 0:
         users[uid]["total_win"] += win
     users[uid]["spins"] += 1
+    update_game_stats(uid, 'rps', won, bet, win if win > 0 else 0)
     save_data()
-    await query.message.edit_text(get_text(uid, 'rps_result', names[player], names[bot], msg) + f"\n\n💰 {get_text(uid, 'balance', round_ton(users[uid]['balance']))}", reply_markup=main_menu(uid))
+    
+    new_achievements = await check_achievements(uid)
+    ach_msg = ""
+    for ach in new_achievements:
+        ach_msg += f"\n\n{ACHIEVEMENTS[ach]['name']}"
+    
+    await query.message.edit_text(get_text(uid, 'rps_result', names[player], names[bot], msg) + f"{ach_msg}\n\n💰 {get_text(uid, 'balance', round_ton(users[uid]['balance']))}", reply_markup=main_menu(uid))
 
 async def play_roulette_color(update: Update, context: ContextTypes.DEFAULT_TYPE, user_choice):
     query = update.callback_query
@@ -729,10 +976,12 @@ async def play_roulette_color(update: Update, context: ContextTypes.DEFAULT_TYPE
             num = random.choice(red)
             win = bet * 2
             msg = get_text(uid, 'win', round_ton(win))
+            won = True
         else:
             num = random.choice(black)
             win = bet * 2
             msg = get_text(uid, 'win', round_ton(win))
+            won = True
     else:
         if random.random() < 0.1:
             num = 0
@@ -740,14 +989,22 @@ async def play_roulette_color(update: Update, context: ContextTypes.DEFAULT_TYPE
             num = random.choice(black if user_choice == "red" else red)
         win = -bet
         msg = get_text(uid, 'lose', round_ton(bet))
+        won = False
     
     users[uid]["balance"] += win
     users[uid]["total_bet"] += bet
     if win > 0:
         users[uid]["total_win"] += win
     users[uid]["spins"] += 1
+    update_game_stats(uid, 'roulette', won, bet, win if win > 0 else 0)
     save_data()
-    await query.message.edit_text(get_text(uid, 'roulette_result', num, msg) + f"\n\n💰 {get_text(uid, 'balance', round_ton(users[uid]['balance']))}", reply_markup=main_menu(uid))
+    
+    new_achievements = await check_achievements(uid)
+    ach_msg = ""
+    for ach in new_achievements:
+        ach_msg += f"\n\n{ACHIEVEMENTS[ach]['name']}"
+    
+    await query.message.edit_text(get_text(uid, 'roulette_result', num, msg) + f"{ach_msg}\n\n💰 {get_text(uid, 'balance', round_ton(users[uid]['balance']))}", reply_markup=main_menu(uid))
 
 async def play_roulette_number(update: Update, context: ContextTypes.DEFAULT_TYPE, guess):
     query = update.callback_query
@@ -757,17 +1014,26 @@ async def play_roulette_number(update: Update, context: ContextTypes.DEFAULT_TYP
     if guess == num:
         win = bet * 36
         msg = f"🎉 ДЖЕКПОТ! +{round_ton(win)} TON"
+        won = True
     else:
         win = -bet
         msg = get_text(uid, 'lose', round_ton(bet))
+        won = False
     
     users[uid]["balance"] += win
     users[uid]["total_bet"] += bet
     if win > 0:
         users[uid]["total_win"] += win
     users[uid]["spins"] += 1
+    update_game_stats(uid, 'roulette', won, bet, win if win > 0 else 0)
     save_data()
-    await query.message.edit_text(get_text(uid, 'roulette_result', num, msg) + f"\n\n💰 {get_text(uid, 'balance', round_ton(users[uid]['balance']))}", reply_markup=main_menu(uid))
+    
+    new_achievements = await check_achievements(uid)
+    ach_msg = ""
+    for ach in new_achievements:
+        ach_msg += f"\n\n{ACHIEVEMENTS[ach]['name']}"
+    
+    await query.message.edit_text(get_text(uid, 'roulette_result', num, msg) + f"{ach_msg}\n\n💰 {get_text(uid, 'balance', round_ton(users[uid]['balance']))}", reply_markup=main_menu(uid))
 
 # ========== ДЕМО ИГРЫ ==========
 async def demo_coin(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -776,6 +1042,13 @@ async def demo_coin(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = str(query.from_user.id)
     keyboard = [[InlineKeyboardButton("🪨 ОРЕЛ", callback_data="demo_coin_heads"), InlineKeyboardButton("📄 РЕШКА", callback_data="demo_coin_tails")], [InlineKeyboardButton(get_text(uid, 'back'), callback_data="demo_mode")]]
     await query.message.edit_text("🪙 ДЕМО МОНЕТКА\n\nВЫБЕРИТЕ СТОРОНУ:", reply_markup=InlineKeyboardMarkup(keyboard))
+
+async def demo_play_coin(update: Update, context: ContextTypes.DEFAULT_TYPE, choice):
+    query = update.callback_query
+    uid = str(query.from_user.id)
+    result = random.choice(["орел", "решка"])
+    msg = "🎉 ПОБЕДА!" if choice == result else "😢 ПРОИГРЫШ!"
+    await query.message.edit_text(f"🪙 ДЕМО МОНЕТКА\n\nВАШ ВЫБОР: {choice}\nВЫПАЛО: {result}\n{msg}\n\n💎 ДЕМО-РЕЖИМ: БАЛАНС НЕ ИЗМЕНЯЕТСЯ", reply_markup=demo_menu(uid))
 
 async def demo_number(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -793,6 +1066,13 @@ async def demo_number(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard.append([InlineKeyboardButton(get_text(uid, 'back'), callback_data="demo_mode")])
     await query.message.edit_text("🔢 ДЕМО УГАДАЙ ЧИСЛО\n\nВЫБЕРИТЕ ЧИСЛО (1-10):", reply_markup=InlineKeyboardMarkup(keyboard))
 
+async def demo_play_number(update: Update, context: ContextTypes.DEFAULT_TYPE, guess):
+    query = update.callback_query
+    uid = str(query.from_user.id)
+    number = random.randint(1, 10)
+    msg = "🎉 ПОБЕДА!" if guess == number else "😢 ПРОИГРЫШ!"
+    await query.message.edit_text(f"🔢 ДЕМО УГАДАЙ ЧИСЛО\n\nВАШЕ ЧИСЛО: {guess}\nВЫПАЛО: {number}\n{msg}\n\n💎 ДЕМО-РЕЖИМ: БАЛАНС НЕ ИЗМЕНЯЕТСЯ", reply_markup=demo_menu(uid))
+
 async def demo_dice_sum(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -809,34 +1089,6 @@ async def demo_dice_sum(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard.append([InlineKeyboardButton(get_text(uid, 'back'), callback_data="demo_mode")])
     await query.message.edit_text("🎲 ДЕМО КОСТИ (СУММА)\n\nВЫБЕРИТЕ СУММУ (2-12):", reply_markup=InlineKeyboardMarkup(keyboard))
 
-async def demo_dice_over(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
-    uid = str(query.from_user.id)
-    keyboard = [[InlineKeyboardButton("📈 БОЛЬШЕ 7", callback_data="demo_dice_over_more"), InlineKeyboardButton("📉 МЕНЬШЕ 7", callback_data="demo_dice_over_less")], [InlineKeyboardButton(get_text(uid, 'back'), callback_data="demo_mode")]]
-    await query.message.edit_text("🎲 ДЕМО КОСТИ (БОЛЬШЕ/МЕНЬШЕ 7)\n\nВЫБЕРИТЕ:", reply_markup=InlineKeyboardMarkup(keyboard))
-
-async def demo_dice_even(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
-    uid = str(query.from_user.id)
-    keyboard = [[InlineKeyboardButton("✅ ЧЁТ", callback_data="demo_dice_even_even"), InlineKeyboardButton("❌ НЕЧЕТ", callback_data="demo_dice_even_odd")], [InlineKeyboardButton(get_text(uid, 'back'), callback_data="demo_mode")]]
-    await query.message.edit_text("🎲 ДЕМО КОСТИ (ЧЁТ/НЕЧЕТ)\n\nВЫБЕРИТЕ:", reply_markup=InlineKeyboardMarkup(keyboard))
-
-async def demo_play_coin(update: Update, context: ContextTypes.DEFAULT_TYPE, choice):
-    query = update.callback_query
-    uid = str(query.from_user.id)
-    result = random.choice(["орел", "решка"])
-    msg = "🎉 ПОБЕДА!" if choice == result else "😢 ПРОИГРЫШ!"
-    await query.message.edit_text(f"🪙 ДЕМО МОНЕТКА\n\nВАШ ВЫБОР: {choice}\nВЫПАЛО: {result}\n{msg}\n\n💎 ДЕМО-РЕЖИМ: БАЛАНС НЕ ИЗМЕНЯЕТСЯ", reply_markup=demo_menu(uid))
-
-async def demo_play_number(update: Update, context: ContextTypes.DEFAULT_TYPE, guess):
-    query = update.callback_query
-    uid = str(query.from_user.id)
-    number = random.randint(1, 10)
-    msg = "🎉 ПОБЕДА!" if guess == number else "😢 ПРОИГРЫШ!"
-    await query.message.edit_text(f"🔢 ДЕМО УГАДАЙ ЧИСЛО\n\nВАШЕ ЧИСЛО: {guess}\nВЫПАЛО: {number}\n{msg}\n\n💎 ДЕМО-РЕЖИМ: БАЛАНС НЕ ИЗМЕНЯЕТСЯ", reply_markup=demo_menu(uid))
-
 async def demo_play_dice_sum(update: Update, context: ContextTypes.DEFAULT_TYPE, guess):
     query = update.callback_query
     uid = str(query.from_user.id)
@@ -844,6 +1096,13 @@ async def demo_play_dice_sum(update: Update, context: ContextTypes.DEFAULT_TYPE,
     total = d1 + d2
     msg = "🎉 ПОБЕДА!" if guess == total else "😢 ПРОИГРЫШ!"
     await query.message.edit_text(f"🎲 ДЕМО КОСТИ\n\n{d1} + {d2} = {total}\n{msg}\n\n💎 ДЕМО-РЕЖИМ: БАЛАНС НЕ ИЗМЕНЯЕТСЯ", reply_markup=demo_menu(uid))
+
+async def demo_dice_over(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    uid = str(query.from_user.id)
+    keyboard = [[InlineKeyboardButton("📈 БОЛЬШЕ 7", callback_data="demo_dice_over_more"), InlineKeyboardButton("📉 МЕНЬШЕ 7", callback_data="demo_dice_over_less")], [InlineKeyboardButton(get_text(uid, 'back'), callback_data="demo_mode")]]
+    await query.message.edit_text("🎲 ДЕМО КОСТИ (БОЛЬШЕ/МЕНЬШЕ 7)\n\nВЫБЕРИТЕ:", reply_markup=InlineKeyboardMarkup(keyboard))
 
 async def demo_play_dice_over(update: Update, context: ContextTypes.DEFAULT_TYPE, choice):
     query = update.callback_query
@@ -857,6 +1116,13 @@ async def demo_play_dice_over(update: Update, context: ContextTypes.DEFAULT_TYPE
     else:
         msg = "😢 ПРОИГРЫШ!"
     await query.message.edit_text(f"🎲 ДЕМО КОСТИ\n\n{d1} + {d2} = {total}\n{msg}\n\n💎 ДЕМО-РЕЖИМ: БАЛАНС НЕ ИЗМЕНЯЕТСЯ", reply_markup=demo_menu(uid))
+
+async def demo_dice_even(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    uid = str(query.from_user.id)
+    keyboard = [[InlineKeyboardButton("✅ ЧЁТ", callback_data="demo_dice_even_even"), InlineKeyboardButton("❌ НЕЧЕТ", callback_data="demo_dice_even_odd")], [InlineKeyboardButton(get_text(uid, 'back'), callback_data="demo_mode")]]
+    await query.message.edit_text("🎲 ДЕМО КОСТИ (ЧЁТ/НЕЧЕТ)\n\nВЫБЕРИТЕ:", reply_markup=InlineKeyboardMarkup(keyboard))
 
 async def demo_play_dice_even(update: Update, context: ContextTypes.DEFAULT_TYPE, choice):
     query = update.callback_query
@@ -895,7 +1161,15 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.message.edit_text(get_text(uid, 'balance', round_ton(users[uid]['balance'])), reply_markup=main_menu(uid))
     elif data == "stats":
         uid = str(query.from_user.id)
-        await query.message.edit_text(get_text(uid, 'stats', users[uid]['spins'], round_ton(users[uid]['total_bet']), round_ton(users[uid]['total_win'])), reply_markup=main_menu(uid))
+        await query.message.edit_text(get_text(uid, 'stats', users[uid]['spins'], round_ton(users[uid]['total_bet']), round_ton(users[uid]['total_win']), users[uid].get('best_streak', 0)), reply_markup=main_menu(uid))
+    elif data == "top":
+        await top_leaderboard(update, context)
+    elif data == "my_stats":
+        await my_game_stats(update, context)
+    elif data == "achievements":
+        await achievements_menu(update, context)
+    elif data == "channel":
+        await channel(update, context)
     elif data == "deposit":
         uid = str(query.from_user.id)
         await query.message.edit_text(get_text(uid, 'deposit', TON_WALLET, MIN_DEPOSIT, uid), reply_markup=main_menu(uid))
@@ -1007,6 +1281,10 @@ def main():
     app.add_handler(CommandHandler("add_deposit", add_deposit))
     app.add_handler(CommandHandler("approve", approve))
     app.add_handler(CommandHandler("decline", decline))
+    app.add_handler(CommandHandler("top", top_leaderboard))
+    app.add_handler(CommandHandler("mystats", my_game_stats))
+    app.add_handler(CommandHandler("achievements", achievements_menu))
+    app.add_handler(CommandHandler("channel", channel))
     app.add_handler(CallbackQueryHandler(callback_handler))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_custom_bet))
     app.add_error_handler(error_handler)
