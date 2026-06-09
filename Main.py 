@@ -1303,8 +1303,9 @@ async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     logger.error(f"Ошибка: {context.error}")
 
 # ========== ЗАПУСК ==========
-async def main():
+def main():
     app = Application.builder().token(BOT_TOKEN).build()
+    
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("balance", balance))
     app.add_handler(CommandHandler("stats", stats))
@@ -1322,12 +1323,14 @@ async def main():
     app.add_handler(CommandHandler("add_deposit", add_deposit))
     app.add_handler(CommandHandler("approve", approve))
     app.add_handler(CommandHandler("decline", decline))
+    
     app.add_handler(CallbackQueryHandler(callback_handler))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_custom_bet))
     app.add_error_handler(error_handler)
+    
     logger.info(f"✅ {CASINO_NAME} ЗАПУЩЕН!")
-    asyncio.create_task(check_reminders(app))
-    await app.run_polling()
+    
+    app.run_polling()
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    main()
