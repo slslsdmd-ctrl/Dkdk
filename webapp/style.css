@@ -1,0 +1,33 @@
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:linear-gradient(135deg,#0a0a0a 0%,#1a1a2e 100%);font-family:system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;color:white;min-height:100vh}
+.container{max-width:500px;margin:0 auto;padding:20px}
+.balance-card{background:linear-gradient(135deg,#1e2a3a 0%,#0f172a 100%);border-radius:25px;padding:20px;text-align:center;box-shadow:0 10px 30px rgba(0,0,0,0.3);border:1px solid rgba(255,215,0,0.2);margin-bottom:25px}
+.balance-label{font-size:14px;color:#aaa;letter-spacing:2px}
+.balance-value{font-size:48px;font-weight:bold;color:#ffd700;margin:5px 0}
+.balance-currency{font-size:14px;color:#aaa}
+.refill-btn{background:linear-gradient(135deg,#f39c12 0%,#e67e22 100%);border:none;color:white;padding:10px 25px;border-radius:30px;font-size:16px;font-weight:bold;margin-top:15px;cursor:pointer;transition:transform 0.2s}
+.refill-btn:hover{transform:scale(1.05)}
+.games-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:15px}
+.game-card{background:rgba(255,255,255,0.05);backdrop-filter:blur(10px);border-radius:20px;padding:20px 15px;text-align:center;cursor:pointer;transition:all 0.3s ease;border:1px solid rgba(255,215,0,0.2)}
+.game-card:hover{transform:translateY(-5px);background:rgba(255,255,255,0.1);border-color:#ffd700}
+.game-emoji{font-size:48px;margin-bottom:10px}
+.game-name{font-size:16px;font-weight:bold;margin-bottom:5px}
+.game-mult{font-size:14px;color:#ffd700}
+.modal{display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.8);z-index:1000;align-items:center;justify-content:center;backdrop-filter:blur(5px)}
+.modal-content{background:linear-gradient(135deg,#16213e 0%,#0f0f23 100%);border-radius:30px;width:90%;max-width:400px;border:1px solid rgba(255,215,0,0.3);animation:slideIn 0.3s ease}
+@keyframes slideIn{from{opacity:0;transform:translateY(-50px)}to{opacity:1;transform:translateY(0)}}
+.modal-header{padding:20px;border-bottom:1px solid rgba(255,255,255,0.1);display:flex;justify-content:space-between;align-items:center}
+.modal-header h3{color:#ffd700}
+.close-btn{background:none;border:none;color:white;font-size:28px;cursor:pointer}
+.modal-body{padding:20px}
+.amount-buttons{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:20px}
+.amount-btn{background:rgba(255,255,255,0.1);border:1px solid rgba(255,215,0,0.3);color:white;padding:12px;border-radius:15px;font-size:16px;font-weight:bold;cursor:pointer;transition:all 0.2s}
+.amount-btn:hover{background:#ffd700;color:#1a1a2e}
+.custom-amount{display:flex;gap:10px;margin-bottom:20px}
+.custom-amount input{flex:1;padding:12px;border-radius:15px;border:1px solid rgba(255,215,0,0.3);background:rgba(255,255,255,0.1);color:white;font-size:16px}
+.custom-pay-btn{background:linear-gradient(135deg,#f39c12,#e67e22);border:none;padding:12px 20px;border-radius:15px;color:white;font-weight:bold;cursor:pointer}
+.wallet-address{text-align:center}
+.wallet-address p{margin-bottom:10px;color:#aaa}
+.address-box{background:rgba(0,0,0,0.5);padding:10px;border-radius:15px;display:flex;align-items:center;justify-content:space-between;gap:10px}
+.address-box code{font-size:12px;word-break:break-all;color:#ffd700}
+.copy-btn{background:#ffd700;border:none;padding:8px 12px;border-radius:10px;cursor:pointer}
