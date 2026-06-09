@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>AZTEC BET</title>
+    <style>
+        *{margin:0;padding:0;box-sizing:border-box}
+        body{background:linear-gradient(135deg,#0a0a0a 0%,#1a1a2e 100%);font-family:system-ui;color:white;min-height:100vh}
+        .container{max-width:500px;margin:0 auto;padding:20px;text-align:center}
+        .logo{font-size:48px;margin:20px 0}
+        .balance-card{background:linear-gradient(135deg,#1e2a3a 0%,#0f172a 100%);border-radius:25px;padding:20px;margin:20px 0}
+        .balance-value{font-size:48px;font-weight:bold;color:#ffd700}
+        .btn{display:block;width:100%;padding:15px;margin:10px 0;border-radius:15px;font-size:16px;font-weight:bold;cursor:pointer;border:none}
+        .btn-deposit{background:#2ecc71;color:white}
+        .btn-withdraw{background:#e74c3c;color:white}
+        .btn-wallet{background:#3498db;color:white}
+        .games-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-top:20px}
+        .game-card{background:rgba(255,255,255,0.1);border-radius:15px;padding:15px;cursor:pointer}
+        .game-card:active{background:rgba(255,255,255,0.2)}
+        .game-emoji{font-size:36px}
+        .footer{text-align:center;margin-top:30px;padding:15px;font-size:12px;color:#666}
+    </style>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+</head>
+<body>
+    <div class="container">
+        <div class="logo">🎰</div>
+        <h1>AZTEC BET</h1>
+        
+        <div class="balance-card">
+            <div class="balance-value" id="balance">0</div>
+            <div>TON</div>
+        </div>
+        
+        <button class="btn btn-deposit" id="depositBtn">💎 ПОПОЛНИТЬ</button>
+        <button class="btn btn-withdraw" id="withdrawBtn">💸 ВЫВЕСТИ</button>
+        <button class="btn btn-wallet" id="walletBtn">🔗 ПРИВЯЗАТЬ КОШЕЛЁК</button>
+        
+        <div class="games-grid">
+            <div class="game-card" data-game="coin"><div class="game-emoji">🪙</div><div>Монетка</div></div>
+            <div class="game-card" data-game="number"><div class="game-emoji">🔢</div><div>Число</div></div>
+            <div class="game-card" data-game="dice"><div class="game-emoji">🎲</div><div>Кости</div></div>
+            <div class="game-card" data-game="slot"><div class="game-emoji">🎰</div><div>Слоты</div></div>
+            <div class="game-card" data-game="roulette"><div class="game-emoji">🎡</div><div>Рулетка</div></div>
+            <div class="game-card" data-game="rps"><div class="game-emoji">✂️</div><div>КНБ</div></div>
+        </div>
+        
+        <div class="footer">AZTEC BET</div>
+    </div>
+    
+    <script>
+        const tg = window.Telegram.WebApp;
+        tg.expand();
+        
+        document.querySelectorAll('.game-card').forEach(card => {
+            card.onclick = () => {
+                tg.showPopup({ 
+                    title: '🎮 Игра', 
+                    message: `Игра "${card.querySelector('div:last-child').innerText}"\nСкоро будет доступна!`,
+                    buttons: [{type: 'ok'}]
+                });
+            };
+        });
+        
+        document.getElementById('depositBtn').onclick = () => {
+            tg.sendData(JSON.stringify({ action: 'deposit' }));
+        };
+        
+        document.getElementById('withdrawBtn').onclick = () => {
+            tg.sendData(JSON.stringify({ action: 'withdraw' }));
+        };
+        
+        document.getElementById('walletBtn').onclick = () => {
+            tg.sendData(JSON.stringify({ action: 'connect_wallet' }));
+        };
+        
+        tg.sendData(JSON.stringify({ action: 'check_balance' }));
+    </script>
+</body>
+</html>
