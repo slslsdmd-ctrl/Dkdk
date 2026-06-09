@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>AZTEC BET</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+</head>
+<body>
+    <div class="container">
+        <!-- Баланс -->
+        <div class="balance-card">
+            <div class="balance-label">💰 БАЛАНС</div>
+            <div class="balance-value" id="balance">0</div>
+            <div class="balance-currency">TON</div>
+            <button class="refill-btn" id="refillBtn">💎 ПОПОЛНИТЬ</button>
+        </div>
+
+        <!-- Игры -->
+        <div class="games-grid">
+            <div class="game-card" data-game="coin">
+                <div class="game-emoji">🪙</div>
+                <div class="game-name">Монетка</div>
+                <div class="game-mult">x2</div>
+            </div>
+            <div class="game-card" data-game="number">
+                <div class="game-emoji">🔢</div>
+                <div class="game-name">Угадай число</div>
+                <div class="game-mult">x3</div>
+            </div>
+            <div class="game-card" data-game="dice">
+                <div class="game-emoji">🎲</div>
+                <div class="game-name">Кости</div>
+                <div class="game-mult">x3</div>
+            </div>
+            <div class="game-card" data-game="slot">
+                <div class="game-emoji">🎰</div>
+                <div class="game-name">Слоты</div>
+                <div class="game-mult">x5</div>
+            </div>
+            <div class="game-card" data-game="roulette">
+                <div class="game-emoji">🎡</div>
+                <div class="game-name">Рулетка</div>
+                <div class="game-mult">x36</div>
+            </div>
+            <div class="game-card" data-game="rps">
+                <div class="game-emoji">✂️</div>
+                <div class="game-name">КНБ</div>
+                <div class="game-mult">x2</div>
+            </div>
+        </div>
+
+        <!-- Модалка пополнения -->
+        <div class="modal" id="depositModal">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3>💎 ПОПОЛНЕНИЕ</h3>
+                    <button class="close-btn" id="closeModal">&times;</button>
+                </div>
+                <div class="modal-body">
+                    <div class="amount-buttons">
+                        <button class="amount-btn" data-amount="1">1 TON</button>
+                        <button class="amount-btn" data-amount="5">5 TON</button>
+                        <button class="amount-btn" data-amount="10">10 TON</button>
+                        <button class="amount-btn" data-amount="25">25 TON</button>
+                        <button class="amount-btn" data-amount="50">50 TON</button>
+                        <button class="amount-btn" data-amount="100">100 TON</button>
+                    </div>
+                    <div class="custom-amount">
+                        <input type="number" id="customAmount" placeholder="Своя сумма" step="0.1" min="0.1">
+                        <button class="custom-pay-btn" id="customPayBtn">ОПЛАТИТЬ</button>
+                    </div>
+                    <div class="wallet-address">
+                        <p>📦 ИЛИ ПЕРЕВОДОМ:</p>
+                        <div class="address-box">
+                            <code id="walletAddress">UQCvOIAt2X1PHfquND-LxzVYg0Gl3a_IExORwwPjowI3Nkb8</code>
+                            <button class="copy-btn" id="copyAddress">📋</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
